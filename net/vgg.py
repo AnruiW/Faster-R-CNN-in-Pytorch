@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torchvision.models import vgg16
 
 
 def compose_layers(net_config, in_channels, use_bn):

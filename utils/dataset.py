@@ -17,7 +17,7 @@ class mini_imagenet(Dataset):
             transforms.ToTensor()
         ])
         imagenet_label_dict = {}
-        with open('ImageNet_Label.txt', 'r', encoding='utf-8') as file:
+        with open('/dataset/ImageNet_Label.txt', 'r', encoding='utf-8') as file:
             for i in range(1000):
                 line = file.readline()[:-1].split(',')
                 label_code, label_name = line[0], line[1:]
