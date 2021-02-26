@@ -3,6 +3,7 @@ import time
 import os
 from torch import optim
 from torch.nn import SmoothL1Loss, CrossEntropyLoss
+from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou
 
 # 可能输出很多proposal
 # 输入就是一个y要手动分
@@ -38,46 +39,18 @@ def evaluate_val_accuracy(net, test_iter, device):
     return accuracy / num_image
 
 
-# def train_vgg(vgg, train_iter, test_iter, optimizer, lr_scheduler, num_epoch, device):
-#     vgg = vgg.to(device)
-#     print("* * * * * * *training VGG net on {}* * * * * * *".format(device))
-#     checkpoint_dir = os.path.join(os.path.abspath('.'), 'vgg_checkpoint.pth')
-#
-#     criteria = torch.nn.CrossEntropyLoss()
-#
-#     if os.path.exists(checkpoint_dir):
-#         vgg.load_state_dict(torch.load(checkpoint_dir))
-#         print("successfully load VGG model parameters")
-#
-#     start_time = time.time()
-#
-#     for epoch in range(num_epoch):
-#         epoch_loss = 0
-#         for image_list, label_list in train_iter:
-#             image_list.to(device)
-#             label_list.to(device)
-#
-#             output_list = vgg(image_list)
-#             loss = criteria(output_list, label_list)
-#             optimizer.zero_grad()
-#             loss.backward()
-#             optimizer.step()
-#             lr_scheduler.step(loss)
-#
-#             current_epoch_loss = loss.cpu().item()
-#             epoch_loss += current_epoch_loss
-#
-#             print(f"VGG: batch training loss: {current_epoch_loss}, batch training time: {time.time()-start_time}")
-#
-#         val_accuracy = evaluate_val_accuracy(vgg, test_iter, device)
-#         print(f"VGG: epoch: {epoch+1}, epoch training loss: {epoch_loss}, validation accuracy: {val_accuracy}, epoch training time: {time.time()-start_time}")
-#         start_time = time.time()
-#
-#         torch.save(vgg, checkpoint_dir)
-#         print(f"saving model to {checkpoint_dir}")
-#
-#     torch.save(vgg, os.path.join(os.path.abspath(), 'vgg_checkpoint.pth'))
-#     print(f"saving final model to {os.path.join(os.path.abspath(), 'vgg_final.pth')}")
+def evaluate_rpn_accuracy(net, test_iter, device):
+    net.eval()
+    num_image, accuracy, iou = 0, 0, 0
+
+    for test_image, test_label in test_iter:
+        with torch.no_grad:
+            # compute iou to measure accuracy
+            output_list, _ = net(test_image.to(device))
+            iou_list = compute_iou(output_list, test_label)
+
+
+
 
 
 def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num_epoch, device):
