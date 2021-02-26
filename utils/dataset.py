@@ -2,7 +2,7 @@ import os
 import torch
 from PIL import Image
 import pandas as pd
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split
 import torchvision.datasets as dataset
 import torchvision.transforms as transforms
 
@@ -53,8 +53,15 @@ def load_imagenet_dataset(root_dir, batch_size=16):
     return train_dataloader, val_dataloader
 
 
-def load_coco_dataset():
-    pass
+def load_coco_dataset(root_dir, json_dir, batch_size=16):
+    coco_dataset = dataset.CocoCaptions(root_dir, json_dir, transform=transforms.ToTensor())
+
+    coco_train_set, coco_val_set = random_split(coco_dataset, [0.7, 0.3])
+
+    train_dataloader = DataLoader(coco_train_set, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(coco_val_set, batch_size=batch_size, shuffle=True)
+
+    return train_dataloader, val_dataloader
 
 
 if __name__ == "__main__":

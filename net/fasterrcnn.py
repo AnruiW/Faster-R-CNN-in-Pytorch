@@ -1,9 +1,9 @@
 from torch import nn
 
 
-class faster_r_cnn(nn.Module):
+class frcnn_net(nn.Module):
     def __init__(self, feature, num_class):
-        super(faster_r_cnn, self).__init__()
+        super(frcnn_net, self).__init__()
         self.feature = feature
         self.pool = nn.AdaptiveAvgPool2d((7, 7))
         self.fc = nn.Linear(7*7*512, 4096)
