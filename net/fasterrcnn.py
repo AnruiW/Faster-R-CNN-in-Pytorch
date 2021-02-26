@@ -19,4 +19,7 @@ class frcnn_net(nn.Module):
 
         return l_fc, s_fc
 
+    def get_feature_layer(self):
+        return self.feature
+
 
