@@ -3,26 +3,31 @@ import time
 import os
 from torch import optim
 from torch.nn import SmoothL1Loss, CrossEntropyLoss
-from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou
+from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou, generate_anchor_box, label_anchor
+
 
 # 可能输出很多proposal
 # 输入就是一个y要手动分
-def rpn_loss(proposal_list, score_list, gt_bbox, gt_score):
+def rpn_loss(proposal_list, score_list, gt_bbox, gt_class):
     '''
     :param proposal_list: the original output of the RPN network
     :param score_list: the original output of the RPN network
     :param gt_bbox: convert the
     :param gt_score:
-    :return:
     '''
     location_loss = SmoothL1Loss()
     classification_loss = CrossEntropyLoss()
     l_loss = location_loss(proposal_list, gt_bbox)
-    s_loss = classification_loss(score_list, gt_score)
-    return l_loss + gt_score * s_loss
+    s_loss = classification_loss(score_list, gt_class)
+    return l_loss + gt_class * s_loss
 
 
 def frcnn_loss(proposal_list, score_list, gt_bbox, gt_score):
+    location_loss = SmoothL1Loss()
+    classification_loss = CrossEntropyLoss()
+    l_loss = location_loss(proposal_list, gt_bbox)
+    s_loss = classification_loss(score_list, gt_score)
+
 
 
 
@@ -51,36 +56,38 @@ def evaluate_rpn_accuracy(net, test_iter, device):
 
 
 
-
-
 def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num_epoch, device):
     net = net.to(device)
     print(f"*************training {net_name} net on {device}*************")
     checkpoint_dir = os.path.join(os.path.abspath('.'), f'{net_name}_checkpoint.pth')
 
-    # if net_name == 'VGG':
-    #     criteria = torch.nn.CrossEntropyLoss()
-    # elif net_name == 'RPN':
-    #     criteria = rpn_loss
-    # elif net_name == 'Faster R CNN':
-    #     criteria = frcnn_loss
-
     for epoch in range(num_epoch):
         epoch_loss = 0
         for image_list, label_list in train_iter:
             image_list.to(device)
-            label_list.to(device)
 
             if net_name == 'VGG':
+                label_list.to(device)
                 output_list = net(image_list)
                 criteria = torch.nn.CrossEntropyLoss()
                 loss = criteria(output_list, label_list)
             elif net_name == 'RPN':
+                print(label_list[0])
+                print(label_list[1])
                 proposal_list, score_list = net(image_list)
-                gt_bbox =
-                gt_score =
-                loss = rpn_loss(proposal_list, score_list, gt_bbox, gt_score)
+                print(proposal_list.shape)
+                print(score_list.shape)
+                print(label_list)
+                gt_class = label_list[0]
+                gt_bbox = label_list[1]
+
+                anchor_list = generate_anchor_box((image_list.shape[2], image_list.shape[3]), True)
+                label_anchor(torch.from_numpy(anchor_list), gt_bbox, gt_class, image_list.shape[0])
+
+
+                loss = rpn_loss(proposal_list, score_list, gt_bbox, gt_class)
             elif net_name == 'Faster R CNN':
+                pass
 
             optimizer.zero_grad()
             loss.backward()
@@ -95,10 +102,9 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
         if net_name == 'VGG':
             val_accuracy = evaluate_val_accuracy(net, test_iter, device)
         elif net_name == 'RPN':
-            val_accuracy =
+            val_accuracy = 0
         elif net_name == 'Faster R CNN':
-            val_accuracy =
-
+            val_accuracy = 0
 
         print(f"RPN: epoch: {epoch+1}, epoch training loss: {epoch_loss}, validation accuracy: {val_accuracy}, epoch training time: {time.time()-start_time}")
         start_time = time.time()
@@ -110,19 +116,16 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
     print(f"saving final model to {os.path.join(os.path.abspath(), f'{net_name}_final.pth')}")
 
 
-def train_fasterrcnn(frcnn, rpn, rpn_lr, frcnn_lr, device):
+def train_fasterrcnn(frcnn, rpn, rpn_lr, frcnn_lr, train_iter, test_iter, device):
     # 4 step alternating training
-    rpn_train_set = 0
-    rpn_val_set = 0
-
     rpn_optimizer = optim.SGD(rpn.parameters(), rpn_lr, momentum=0.9, weight_decay=5e-4)
     lr_scheduler = optim.lr_scheduler.StepLR(rpn_optimizer, step_size=30, gamma=0.1)
 
     # 第一轮rpn跟Faster rcnn不应该共享参数
-    train_net(rpn, 'RPN', rpn_train_set, rpn_val_set, rpn_optimizer, lr_scheduler, 45, device)
-    train_net(frcnn, 'Faster R CNN', rpn_train_set, rpn_val_set, rpn_optimizer, lr_scheduler, 45, device)
-    train_net(rpn, 'RPN', rpn_train_set, rpn_val_set, rpn_optimizer, lr_scheduler, 45, device)
-    train_net(frcnn, 'Faster R CNN', rpn_train_set, rpn_val_set, rpn_optimizer, lr_scheduler, 45, device)
+    train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
+    train_net(frcnn, 'Faster R CNN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
+    train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
+    train_net(frcnn, 'Faster R CNN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
 
 
 

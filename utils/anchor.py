@@ -50,10 +50,10 @@ def repeat_product(x, y):
     return np.stack([coordinate[:, 0], coordinate[:, 1], height_width[:, 0], height_width[:, 1]], axis=1)
 
 
-def generate_anchor_box(feature_map_size, anchor_ratio=[0.5, 1, 2], anchor_size=[128, 256, 512]):
+def generate_anchor_box(feature_map_size, is_train, anchor_ratio=[0.5, 1, 2], anchor_size=[128, 256, 512]):
     # generate anchor center coordinate (x,y) for each cell in the feature map
-    x = np.arange(8, feature_map_size[0] * 16, 16)
-    y = np.arange(8, feature_map_size[1] * 16, 16)
+    x = np.arange(8, feature_map_size[0] * 32, 32)
+    y = np.arange(8, feature_map_size[1] * 32, 32)
     x, y = np.meshgrid(x, y)
     anchor_coordinate = np.stack((x.ravel(), y.ravel()), axis=1)
 
@@ -65,7 +65,18 @@ def generate_anchor_box(feature_map_size, anchor_ratio=[0.5, 1, 2], anchor_size=
             anchor_w_h[index, 0] = np.sqrt(anchor_size[i] ** 2 / anchor_ratio[j])
             anchor_w_h[index, 1] = anchor_w_h[index, 0] * anchor_ratio[j]
 
-    return repeat_product(anchor_coordinate, anchor_w_h)
+    anchor_list = repeat_product(anchor_coordinate, anchor_w_h)
+
+    if is_train:
+        low_bound = anchor_list[:, :2] - anchor_list[:, 2:] / 2
+        del_index = np.where(low_bound < 0)[0]
+        anchor_list = np.delete(anchor_list, del_index, axis=0)
+
+        high_bound = anchor_list[:, :2] + anchor_list[:, 2:] / 2
+        del_index = np.where(high_bound > 800)[0]
+        anchor_list = np.delete(anchor_list, del_index, axis=0)
+
+    return anchor_list
 
 
 def compute_iou(anchor_bbox, gt_bbox):
@@ -73,8 +84,10 @@ def compute_iou(anchor_bbox, gt_bbox):
     :param anchor_bbox, gt_bbox: be of a set of bbox of the form x,y,w,h
     :return: the iou of an anchor bbox and a grount-truth bbox
     '''
-    batch_size = anchor_bbox.size(0)
-    num_gt = gt_bbox.size(0)
+    print(anchor_bbox.shape)
+    print(gt_bbox.shape)
+    batch_size = anchor_bbox.shape[0]
+    num_gt = len(gt_bbox)
 
     # convert x,y,w,h to x_min,y_min,x_max,y_max
     convert_anchor_bbox = torch.zeros(anchor_bbox.shape)
@@ -99,7 +112,16 @@ def compute_iou(anchor_bbox, gt_bbox):
     return interact / union
 
 
-def anchor_label(anchor_bbox, gt_bbox):
-    pass
+def label_anchor(anchor_bbox, gt_bbox, gt_class, batch_size):
+    print(anchor_bbox)
+    print(gt_bbox)
+
+    gt_list = []
+    for i in range(batch_size):
+        iou_list = compute_iou(anchor_bbox, torch.stack(gt_bbox)[:, i, :])
+    print(iou_list)
+    raise Exception
 
 
+if __name__ == '__main__':
+    print(generate_anchor_box((25, 25), True))

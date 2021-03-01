@@ -1,5 +1,5 @@
 from torch import nn
-
+import torch
 
 class frcnn_net(nn.Module):
     def __init__(self, feature, num_class):
@@ -11,9 +11,12 @@ class frcnn_net(nn.Module):
         self.s_fc = nn.Linear(4096, num_class)
 
     def forward(self, x):
+        print(x.shape)
         feature = self.feature(x)
+        print(feature.shape)
         pool = self.pool(feature)
-        fc = self.fc(pool)
+        print(pool.shape)
+        fc = self.fc(torch.flatten(pool, 1))
         l_fc = self.l_fc(fc)
         s_fc = self.s_fc(fc)
 
