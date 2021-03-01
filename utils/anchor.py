@@ -1,4 +1,5 @@
 import torch
+import cv2
 import numpy as np
 
 
@@ -84,10 +85,8 @@ def compute_iou(anchor_bbox, gt_bbox):
     :param anchor_bbox, gt_bbox: be of a set of bbox of the form x,y,w,h
     :return: the iou of an anchor bbox and a grount-truth bbox
     '''
-    print(anchor_bbox.shape)
-    print(gt_bbox.shape)
     batch_size = anchor_bbox.shape[0]
-    num_gt = len(gt_bbox)
+    num_gt = gt_bbox.shape[0]
 
     # convert x,y,w,h to x_min,y_min,x_max,y_max
     convert_anchor_bbox = torch.zeros(anchor_bbox.shape)
@@ -105,23 +104,31 @@ def compute_iou(anchor_bbox, gt_bbox):
     interact = torch.clamp((max_xy - min_xy), min=0)
     interact = interact[:, :, 0] * interact[:, :, 1]
 
-    area_anchor = ((anchor_bbox[:, 2]-anchor_bbox[:, 0]) * (anchor_bbox[:, 3]-anchor_bbox[:, 1])).unsqueeze(1).expand_as(interact)
-    area_gt = ((gt_bbox[:, 2]-gt_bbox[:, 0]) * (gt_bbox[:, 3]-gt_bbox[:, 1])).unsqueeze(0).expand_as(interact)
-    union = area_anchor + area_gt - interact
+    area_anchor = ((convert_anchor_bbox[:, 2]-convert_anchor_bbox[:, 0]) * (convert_anchor_bbox[:, 3]-convert_anchor_bbox[:, 1])).unsqueeze(1).expand_as(interact)
+    area_gt = ((convert_gt_box[:, 2]-convert_gt_box[:, 0]) * (convert_gt_box[:, 3]-convert_gt_box[:, 1])).unsqueeze(0).expand_as(interact)
 
+    union = area_anchor.float() + area_gt - interact
     return interact / union
 
 
 def label_anchor(anchor_bbox, gt_bbox, gt_class, batch_size):
-    print(anchor_bbox)
-    print(gt_bbox)
-
-    gt_list = []
+    print(gt_class)
+    anchor_label = []
     for i in range(batch_size):
         iou_list = compute_iou(anchor_bbox, torch.stack(gt_bbox)[:, i, :])
-    print(iou_list)
+        for iou in iou_list:
+            print(iou)
+
+
     raise Exception
 
 
 if __name__ == '__main__':
-    print(generate_anchor_box((25, 25), True))
+    anchor_list = torch.from_numpy(generate_anchor_box((25, 25), True))
+    gt_bbox = [torch.Tensor([[144.3750, 107.8125,  83.7500,  46.4062], [146.8750,  80.1562, 273.7500, 134.5312]]),
+               torch.Tensor([[100.3750, 107.8125,  83.7500,  46.4062], [126.8750,  80.1562, 273.7500, 134.5312]])]
+    # gt_bbox = [torch.Tensor([[144.3750, 107.8125,  83.7500,  46.4062], [146.8750,  80.1562, 273.7500, 134.5312]])]
+    for i in range(2):
+        iou_list = compute_iou(anchor_list, torch.stack(gt_bbox)[:, i, :])
+        print(iou_list)
+    raise Exception
