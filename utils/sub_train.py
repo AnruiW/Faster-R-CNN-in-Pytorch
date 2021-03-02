@@ -8,17 +8,64 @@ from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou, ge
 
 # 可能输出很多proposal
 # 输入就是一个y要手动分
-def rpn_loss(proposal_list, score_list, gt_bbox, gt_class):
+def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class):
     '''
     :param proposal_list: the original output of the RPN network
     :param score_list: the original output of the RPN network
     :param gt_bbox: convert the
     :param gt_score:
     '''
+    print()
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+
+    print(proposal_list)
+    print(gt_bbox)
+    print()
+    print(anchor_label)
+    print(anchor_match)
+    print(torch.where(anchor_match != -1))
+    expand_gt_bbox = []
+    expand_gt_score = []
+    for i in range(len(proposal_list)):
+        tem_gt_bbox = []
+        tem_gt_score = []
+        for j, match in enumerate(anchor_match[:, i]):
+            if match != -1:
+                tem_gt_bbox.append(proposal_list[i][j])
+                tem_gt_score.append(0)
+            else:
+                tem_gt_bbox.append(gt_bbox[match][i])
+                tem_gt_score.append(1)
+        expand_gt_bbox.append(torch.stack(tem_gt_bbox))
+        expand_gt_score.append(torch.tensor(tem_gt_score))
+    expand_gt_bbox = torch.stack(expand_gt_bbox)
+    expand_gt_score = torch.stack(expand_gt_score)
+    print(proposal_list.shape)
+    print(expand_gt_bbox.shape)
     location_loss = SmoothL1Loss()
-    classification_loss = CrossEntropyLoss()
-    l_loss = location_loss(proposal_list, gt_bbox)
-    s_loss = classification_loss(score_list, gt_class)
+    l_loss = location_loss(proposal_list, expand_gt_bbox)
+
+
+    print(score_list.shape)
+    print(expand_gt_score.shape)
+
+    classification_loss = CrossEntropyLoss(weight=torch.tensor([0, 1]))
+
+    s_loss = []
+
+    for i in range(len(proposal_list)):
+        tem_s_loss = 0
+        for j in range(len(score_list[i])):
+            print(expand_gt_bbox[i])
+            print(score_list[i][j])
+            tem_s_loss += expand_gt_bbox[i] * classification_loss(score_list[i][j], expand_gt_bbox[i])
+        s_loss.append(tem_s_loss)
+
+
+
+    # classification_loss(score_list, expand_gt_score)
+    print(l_loss)
+    print(s_loss)
     return l_loss + gt_class * s_loss
 
 
@@ -55,7 +102,6 @@ def evaluate_rpn_accuracy(net, test_iter, device):
             iou_list = compute_iou(output_list, test_label)
 
 
-
 def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num_epoch, device):
     net = net.to(device)
     print(f"*************training {net_name} net on {device}*************")
@@ -72,20 +118,18 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
                 criteria = torch.nn.CrossEntropyLoss()
                 loss = criteria(output_list, label_list)
             elif net_name == 'RPN':
-                print(label_list[0])
-                print(label_list[1])
                 proposal_list, score_list = net(image_list)
-                print(proposal_list.shape)
-                print(score_list.shape)
+                print(proposal_list)
+                print(score_list)
                 print(label_list)
                 gt_class = label_list[0]
                 gt_bbox = label_list[1]
 
-                anchor_list = generate_anchor_box((image_list.shape[2], image_list.shape[3]), True)
-                label_anchor(torch.from_numpy(anchor_list), gt_bbox, gt_class, image_list.shape[0])
 
+                # anchor_list = generate_anchor_box((image_list.shape[2], image_list.shape[3]))
+                anchor_label, anchor_match = label_anchor(proposal_list, gt_bbox, gt_class, image_list.shape[0], True)
 
-                loss = rpn_loss(proposal_list, score_list, gt_bbox, gt_class)
+                loss = rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class)
             elif net_name == 'Faster R CNN':
                 pass
 

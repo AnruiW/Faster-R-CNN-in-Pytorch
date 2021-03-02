@@ -1,6 +1,7 @@
 import torch
 import cv2
 import numpy as np
+from torch.nn import LSTM
 
 
 def compute_rpn_gt_output(anchor_bbox, gt_box):
@@ -17,18 +18,31 @@ def compute_rpn_gt_output(anchor_bbox, gt_box):
     return np.array([tx, ty, tw, th])
 
 
-def convert_rpn_output_predict_bbox(rpn_output, anchor_bbox):
+def convert_rpn_output_predict_bbox(rpn_output):
     '''
     :param rpn_output: the output of rpn location output
     :param anchor_bbox: corresponding anchor box
     :return: convert rpn location output to bbox coordinate
     '''
-    x = rpn_output[0] * anchor_bbox[2] + anchor_bbox[0]
-    y = rpn_output[1] * anchor_bbox[3] + anchor_bbox[1]
-    w = np.exp(rpn_output[2]) * anchor_bbox[2]
-    h = np.exp(rpn_output[3]) * anchor_bbox[3]
+    anchor_bbox = generate_anchor_box((25, 25))
+    anchor_bbox = anchor_bbox.float()
 
-    return np.array([x, y, w, h])
+    x = rpn_output[:, 0] * anchor_bbox[:, 2] + anchor_bbox[:, 0]
+    y = rpn_output[:, 1] * anchor_bbox[:, 3] + anchor_bbox[:, 1]
+    w = torch.exp(rpn_output[:, 2]) * anchor_bbox[:, 2]
+    h = torch.exp(rpn_output[:, 3]) * anchor_bbox[:, 3]
+
+    rpn_anchor_bbox = torch.stack([x, y, w, h]).transpose(1, 0)
+    # if is_train:
+    #     low_bound = rpn_anchor_bbox[:, :2] - rpn_anchor_bbox[:, 2:] / 2
+    #     del_index = np.where(low_bound < 0)[0]
+    #     rpn_anchor_bbox = np.delete(rpn_anchor_bbox, del_index, axis=0)
+    #
+    #     high_bound = rpn_anchor_bbox[:, :2] + rpn_anchor_bbox[:, 2:] / 2
+    #     del_index = np.where(high_bound > 800)[0]
+    #     rpn_anchor_bbox = np.delete(rpn_anchor_bbox, del_index, axis=0)
+
+    return rpn_anchor_bbox
 
 
 def compute_gt_output(anchor_bbox, gt_bbox):
@@ -37,12 +51,12 @@ def compute_gt_output(anchor_bbox, gt_bbox):
     :param gt_bbox: coordinate and WH for a ground-truth box, in the form of x,y,w,h
     :return: the ground-truth for the output of RPN network
     '''
-    tx = (gt_bbox[0] - anchor_bbox[0]) / anchor_bbox[2]
-    ty = (gt_bbox[1] - anchor_bbox[1]) / anchor_bbox[3]
-    tw = np.log(gt_bbox[2] / anchor_bbox[2])
-    th = np.log(gt_bbox[3] / anchor_bbox[3])
+    tx = (gt_bbox[:, 0] - anchor_bbox[:, 0]) / anchor_bbox[:, 2]
+    ty = (gt_bbox[:, 1] - anchor_bbox[:, 1]) / anchor_bbox[:, 3]
+    tw = np.log(gt_bbox[:, 2] / anchor_bbox[:, 2])
+    th = np.log(gt_bbox[:, 3] / anchor_bbox[:, 3])
 
-    return np.array([tx, ty, tw, th])
+    return torch.stack([tx, ty, tw, th]).transpose(1, 0)
 
 
 def repeat_product(x, y):
@@ -51,7 +65,7 @@ def repeat_product(x, y):
     return np.stack([coordinate[:, 0], coordinate[:, 1], height_width[:, 0], height_width[:, 1]], axis=1)
 
 
-def generate_anchor_box(feature_map_size, is_train, anchor_ratio=[0.5, 1, 2], anchor_size=[128, 256, 512]):
+def generate_anchor_box(feature_map_size, anchor_ratio=[0.5, 1, 2], anchor_size=[128, 256, 512]):
     # generate anchor center coordinate (x,y) for each cell in the feature map
     x = np.arange(8, feature_map_size[0] * 32, 32)
     y = np.arange(8, feature_map_size[1] * 32, 32)
@@ -68,16 +82,7 @@ def generate_anchor_box(feature_map_size, is_train, anchor_ratio=[0.5, 1, 2], an
 
     anchor_list = repeat_product(anchor_coordinate, anchor_w_h)
 
-    if is_train:
-        low_bound = anchor_list[:, :2] - anchor_list[:, 2:] / 2
-        del_index = np.where(low_bound < 0)[0]
-        anchor_list = np.delete(anchor_list, del_index, axis=0)
-
-        high_bound = anchor_list[:, :2] + anchor_list[:, 2:] / 2
-        del_index = np.where(high_bound > 800)[0]
-        anchor_list = np.delete(anchor_list, del_index, axis=0)
-
-    return anchor_list
+    return torch.from_numpy(anchor_list)
 
 
 def compute_iou(anchor_bbox, gt_bbox):
@@ -111,16 +116,52 @@ def compute_iou(anchor_bbox, gt_bbox):
     return interact / union
 
 
-def label_anchor(anchor_bbox, gt_bbox, gt_class, batch_size):
+def label_anchor(output_bbox, gt_bbox, gt_class, batch_size, is_train):
     print(gt_class)
     anchor_label = []
+    anchor_match = []
+
     for i in range(batch_size):
-        iou_list = compute_iou(anchor_bbox, torch.stack(gt_bbox)[:, i, :])
+        tem_label = []
+        tem_match = []
+        net_output_anchor_bbox = convert_rpn_output_predict_bbox(output_bbox[i])
+        iou_list = compute_iou(net_output_anchor_bbox, torch.stack(gt_bbox)[:, i, :])
+
         for iou in iou_list:
-            print(iou)
+            if torch.any(iou > 0.3):
+                # anchor_label.append(int(gt_class[index][i]))
+                tem_label.append(1)
+                tem_match.append(iou.argmax())
+            elif torch.all(iou < 0.1):
+                tem_label.append(0)
+                tem_match.append(iou.argmax())
+            else:
+                tem_label.append(-1)
+                tem_match.append(-1)
 
+        tem_label = torch.tensor(tem_label)
+        tem_match = torch.tensor(tem_label)
 
-    raise Exception
+        if is_train:
+            low_bound = net_output_anchor_bbox[:, :2] - net_output_anchor_bbox[:, 2:] / 2
+            del_index_1 = torch.where(low_bound < 0)[0]
+
+            high_bound = net_output_anchor_bbox[:, :2] + net_output_anchor_bbox[:, 2:] / 2
+            del_index_2 = torch.where(high_bound > 800)[0]
+        del_index = torch.cat([del_index_1, del_index_2])
+
+        tem_label[del_index] = -1
+        tem_match[del_index] = -1
+
+        anchor_label.append(tem_label)
+        anchor_match.append(tem_match)
+
+    anchor_label = torch.stack(anchor_label).transpose(1, 0)
+    anchor_match = torch.stack(anchor_match).transpose(1, 0)
+    print(anchor_label)
+    # net_output_anchor_bbox = np.delete(net_output_anchor_bbox, delete_list, axis=0)
+
+    return anchor_label, anchor_match
 
 
 if __name__ == '__main__':
@@ -130,5 +171,8 @@ if __name__ == '__main__':
     # gt_bbox = [torch.Tensor([[144.3750, 107.8125,  83.7500,  46.4062], [146.8750,  80.1562, 273.7500, 134.5312]])]
     for i in range(2):
         iou_list = compute_iou(anchor_list, torch.stack(gt_bbox)[:, i, :])
-        print(iou_list)
-    raise Exception
+        for j, iou in enumerate(iou_list):
+            np_iou = iou.numpy()
+            if np.any(np_iou > 0.7):
+                index = np_iou.argmax()
+

@@ -116,7 +116,7 @@ class VOC_Dataset(Dataset):
             # compute the coordinate after affine transformation
             gt_bbox_list.append(torch.tensor([x*x_scale, y*y_scale, w*x_scale, h*y_scale]))
 
-        return image, gt_cat_list, gt_bbox_list
+        return image, [gt_cat_list, gt_bbox_list]
 
 
 if __name__ == "__main__":
