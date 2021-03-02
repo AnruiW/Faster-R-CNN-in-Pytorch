@@ -15,15 +15,7 @@ def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_
     :param gt_bbox: convert the
     :param gt_score:
     '''
-    print()
-    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
-    print(proposal_list)
-    print(gt_bbox)
-    print()
-    print(anchor_label)
-    print(anchor_match)
-    print(torch.where(anchor_match != -1))
     expand_gt_bbox = []
     expand_gt_score = []
     for i in range(len(proposal_list)):
@@ -40,33 +32,24 @@ def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_
         expand_gt_score.append(torch.tensor(tem_gt_score))
     expand_gt_bbox = torch.stack(expand_gt_bbox)
     expand_gt_score = torch.stack(expand_gt_score)
-    print(proposal_list.shape)
-    print(expand_gt_bbox.shape)
+
     location_loss = SmoothL1Loss()
-    l_loss = location_loss(proposal_list, expand_gt_bbox)
+    l_loss = []
+    for i in range(len(proposal_list)):
+        tem_l_loss = 0
+        for j in range(len(expand_gt_bbox[i])):
+            tem_l_loss += expand_gt_score[i][j] * location_loss(expand_gt_bbox[i][j], proposal_list[i][j])
+        l_loss.append(tem_l_loss * 10 / len(proposal_list[0]))
 
-
-    print(score_list.shape)
-    print(expand_gt_score.shape)
-
-    classification_loss = CrossEntropyLoss(weight=torch.tensor([0, 1]))
-
+    classification_loss = CrossEntropyLoss()
     s_loss = []
-
     for i in range(len(proposal_list)):
         tem_s_loss = 0
         for j in range(len(score_list[i])):
-            print(expand_gt_bbox[i])
-            print(score_list[i][j])
-            tem_s_loss += expand_gt_bbox[i] * classification_loss(score_list[i][j], expand_gt_bbox[i])
-        s_loss.append(tem_s_loss)
+            tem_s_loss += classification_loss(score_list[i][j].unsqueeze(0), expand_gt_score[i][j].unsqueeze(0))
+        s_loss.append(tem_s_loss / len(proposal_list))
 
-
-
-    # classification_loss(score_list, expand_gt_score)
-    print(l_loss)
-    print(s_loss)
-    return l_loss + gt_class * s_loss
+    return (torch.stack(l_loss) + torch.stack(s_loss)).sum()
 
 
 def frcnn_loss(proposal_list, score_list, gt_bbox, gt_score):
@@ -74,8 +57,6 @@ def frcnn_loss(proposal_list, score_list, gt_bbox, gt_score):
     classification_loss = CrossEntropyLoss()
     l_loss = location_loss(proposal_list, gt_bbox)
     s_loss = classification_loss(score_list, gt_score)
-
-
 
 
 def evaluate_val_accuracy(net, test_iter, device):
@@ -106,6 +87,7 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
     net = net.to(device)
     print(f"*************training {net_name} net on {device}*************")
     checkpoint_dir = os.path.join(os.path.abspath('.'), f'{net_name}_checkpoint.pth')
+    start_time = time.time()
 
     for epoch in range(num_epoch):
         epoch_loss = 0
@@ -117,19 +99,15 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
                 output_list = net(image_list)
                 criteria = torch.nn.CrossEntropyLoss()
                 loss = criteria(output_list, label_list)
+
             elif net_name == 'RPN':
                 proposal_list, score_list = net(image_list)
-                print(proposal_list)
-                print(score_list)
-                print(label_list)
                 gt_class = label_list[0]
                 gt_bbox = label_list[1]
 
-
-                # anchor_list = generate_anchor_box((image_list.shape[2], image_list.shape[3]))
                 anchor_label, anchor_match = label_anchor(proposal_list, gt_bbox, gt_class, image_list.shape[0], True)
-
                 loss = rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class)
+
             elif net_name == 'Faster R CNN':
                 pass
 

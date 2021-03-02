@@ -117,7 +117,6 @@ def compute_iou(anchor_bbox, gt_bbox):
 
 
 def label_anchor(output_bbox, gt_bbox, gt_class, batch_size, is_train):
-    print(gt_class)
     anchor_label = []
     anchor_match = []
 
@@ -158,7 +157,6 @@ def label_anchor(output_bbox, gt_bbox, gt_class, batch_size, is_train):
 
     anchor_label = torch.stack(anchor_label).transpose(1, 0)
     anchor_match = torch.stack(anchor_match).transpose(1, 0)
-    print(anchor_label)
     # net_output_anchor_bbox = np.delete(net_output_anchor_bbox, delete_list, axis=0)
 
     return anchor_label, anchor_match
