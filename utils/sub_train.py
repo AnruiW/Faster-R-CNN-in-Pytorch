@@ -107,9 +107,15 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
 
                 anchor_label, anchor_match = label_anchor(proposal_list, gt_bbox, gt_class, image_list.shape[0], True)
                 loss = rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class)
+                print(loss)
 
             elif net_name == 'Faster R CNN':
-                pass
+                proposal_list, score_list = net(image_list)
+                print(proposal_list.shape)
+                print(proposal_list)
+
+                print(score_list.shape)
+                print(score_list)
 
             optimizer.zero_grad()
             loss.backward()

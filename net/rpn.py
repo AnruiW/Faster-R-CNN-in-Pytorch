@@ -45,7 +45,6 @@ class rpn_net(nn.Module):
         # the output of s_conv is (batch_size, 18, 7, 7)
         # need to be converted into (batch_size, num of box, 2)
         score_list = score_list.permute(0, 2, 3, 1).contiguous().view(x.shape[0], -1, 2)
-        score_list = F.softmax(score_list, dim=-1)
 
         return location_list, score_list
 
