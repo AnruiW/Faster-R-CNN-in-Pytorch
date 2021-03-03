@@ -4,18 +4,19 @@ import numpy as np
 from torch.nn import LSTM
 
 
-def compute_rpn_gt_output(anchor_bbox, gt_box):
+def compute_rpn_gt_output(anchor_bbox, gt_bbox):
     '''
     :param anchor_bbox: in the form of x,y,w,h
-    :param gt_box: coordinate and WH for a ground-truth box, in the form of x,y,w,h
+    :param gt_bbox: coordinate and WH for a ground-truth box, in the form of x,y,w,h
     :return: compute the ground-truth for the output of the bbox regression
     '''
-    tx = (gt_box[0] - anchor_bbox[0]) / anchor_bbox[2]
-    ty = (gt_box[1] - anchor_bbox[1]) / anchor_bbox[3]
-    tw = np.log(gt_box[2] / anchor_bbox[2])
-    th = np.log(gt_box[3] / anchor_bbox[3])
+    tx = (gt_bbox[0] - anchor_bbox[0]) / anchor_bbox[2]
+    ty = (gt_bbox[1] - anchor_bbox[1]) / anchor_bbox[3]
+    tw = np.log(gt_bbox[2] / anchor_bbox[2])
+    th = np.log(gt_bbox[3] / anchor_bbox[3])
 
-    return np.array([tx, ty, tw, th])
+    result = torch.tensor([tx, ty, tw, th], dtype=torch.float32, requires_grad=False)
+    return result
 
 
 def convert_rpn_output_predict_bbox(rpn_output):

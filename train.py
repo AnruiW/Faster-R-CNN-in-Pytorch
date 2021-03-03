@@ -28,7 +28,7 @@ def train():
     # train_net(vgg, 'VGG', vgg_train_set, vgg_val_set, vgg_optimizer, vgg_lr_scheduler, 75, device)
 
     rpn = rpn_net(vgg.get_feature_layer())
-    frcnn = frcnn_net(vgg.get_feature_layer(), 20)
+    frcnn = frcnn_net(rpn, 20)
     rpn_lr = 1e-3
     frcnn_lr = 1e-4
 

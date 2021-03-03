@@ -3,7 +3,7 @@ import time
 import os
 from torch import optim
 from torch.nn import SmoothL1Loss, CrossEntropyLoss
-from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou, generate_anchor_box, label_anchor
+from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou, generate_anchor_box, label_anchor, compute_rpn_gt_output
 
 
 # 可能输出很多proposal
@@ -15,6 +15,7 @@ def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_
     :param gt_bbox: convert the
     :param gt_score:
     '''
+    anchor_list = generate_anchor_box((25, 25))
 
     expand_gt_bbox = []
     expand_gt_score = []
@@ -26,8 +27,9 @@ def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_
                 tem_gt_bbox.append(proposal_list[i][j])
                 tem_gt_score.append(0)
             else:
-                tem_gt_bbox.append(gt_bbox[match][i])
+                tem_gt_bbox.append(compute_rpn_gt_output(anchor_list[j], gt_bbox[match][i]))
                 tem_gt_score.append(1)
+
         expand_gt_bbox.append(torch.stack(tem_gt_bbox))
         expand_gt_score.append(torch.tensor(tem_gt_score))
     expand_gt_bbox = torch.stack(expand_gt_bbox)
@@ -101,7 +103,7 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
                 loss = criteria(output_list, label_list)
 
             elif net_name == 'RPN':
-                proposal_list, score_list = net(image_list)
+                _, proposal_list, score_list = net(image_list)
                 gt_class = label_list[0]
                 gt_bbox = label_list[1]
 
@@ -150,7 +152,7 @@ def train_fasterrcnn(frcnn, rpn, rpn_lr, frcnn_lr, train_iter, test_iter, device
     lr_scheduler = optim.lr_scheduler.StepLR(rpn_optimizer, step_size=30, gamma=0.1)
 
     # 第一轮rpn跟Faster rcnn不应该共享参数
-    train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
+    # train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
     train_net(frcnn, 'Faster R CNN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
     train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
     train_net(frcnn, 'Faster R CNN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
