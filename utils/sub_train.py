@@ -54,11 +54,36 @@ def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_
     return (torch.stack(l_loss) + torch.stack(s_loss)).sum()
 
 
-def frcnn_loss(proposal_list, score_list, gt_bbox, gt_score):
+def frcnn_loss(proposal_list, score_list, gt_bbox, gt_class):
     location_loss = SmoothL1Loss()
     classification_loss = CrossEntropyLoss()
-    l_loss = location_loss(proposal_list, gt_bbox)
-    s_loss = classification_loss(score_list, gt_score)
+
+    print(score_list)
+    label_list = []
+    l_loss = 0
+    s_loss = 0
+    for i in range(len(proposal_list)):
+        iou_list = compute_iou(proposal_list[i], gt_bbox[:, i, :])
+        predi_label_list = score_list[i].argmax(dim=1)
+        batch_label_list = iou_list.argmax(dim=1)
+
+        gt_bbox_list = []
+        gt_class_list = []
+
+        for j, index in enumerate(batch_label_list):
+            if predi_label_list[j] == 0:
+                gt_bbox_list.append(proposal_list[j])
+            else:
+                gt_bbox_list.append(gt_bbox[:, i, :][index])
+            # gt_bbox_list.append(gt_bbox[:, i, :][index])
+            gt_class_list.append(gt_class[index][i])
+        gt_bbox_list = torch.stack(gt_bbox_list)
+        gt_class_list = torch.stack(gt_class_list)
+        l_loss += location_loss(proposal_list[i], gt_bbox_list)
+        s_loss += classification_loss(score_list[i], gt_class_list)
+    print(l_loss)
+    print(s_loss)
+    return l_loss + s_loss
 
 
 def evaluate_val_accuracy(net, test_iter, device):
@@ -114,10 +139,13 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
             elif net_name == 'Faster R CNN':
                 proposal_list, score_list = net(image_list)
                 print(proposal_list.shape)
-                print(proposal_list)
-
                 print(score_list.shape)
-                print(score_list)
+                gt_class = label_list[0]
+                gt_bbox = torch.cat([i.unsqueeze(0) for i in label_list[1]], dim=0)
+                print(gt_class)
+                print(gt_bbox)
+                loss = frcnn_loss(proposal_list, score_list, gt_bbox, gt_class)
+
 
             optimizer.zero_grad()
             loss.backward()

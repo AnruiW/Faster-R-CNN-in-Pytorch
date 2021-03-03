@@ -17,7 +17,7 @@ class frcnn_net(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d((7, 7))
         self.fc = nn.Linear(7*7*512, 4096)
         self.l_fc = nn.Linear(4096, num_class * 4)
-        self.s_fc = nn.Linear(4096, num_class)
+        self.s_fc = nn.Linear(4096, num_class + 1)
 
     def forward(self, x):
         feature_map, proposal_list, score_list = self.rpn(x)
@@ -35,13 +35,14 @@ class frcnn_net(nn.Module):
         for i in range(len(proposal_list)):
             bbox_index_list = boxes.nms(bbox_list[i], score_list[i, :, 1], 0.7)
             if self.training:
-                tem_bbox_list.append(bbox_list[i][bbox_index_list, :][:2000])
+                tem_bbox_list.append(bbox_list[i][bbox_index_list, :][:500])
             else:
-                tem_bbox_list.append(bbox_list[i][bbox_index_list, :][:3000])
+                tem_bbox_list.append(bbox_list[i][bbox_index_list, :][:1000])
 
         l_out_list = []
         s_out_list = []
         for i, batch_bbox in enumerate(tem_bbox_list):
+
             l_list = []
             s_list = []
             for bbox in batch_bbox:
@@ -59,13 +60,9 @@ class frcnn_net(nn.Module):
 
             l_out_list.append(torch.stack(l_list))
             s_out_list.append(torch.stack(s_list))
-                
+
         l_out_list = torch.stack(l_out_list)
         s_out_list = torch.stack(s_out_list)
 
         return l_out_list, s_out_list
-
-    def get_feature_layer(self):
-        return self.feature
-
 
