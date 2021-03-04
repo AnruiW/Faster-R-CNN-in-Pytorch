@@ -6,8 +6,6 @@ from torch.nn import SmoothL1Loss, CrossEntropyLoss
 from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou, generate_anchor_box, label_anchor, compute_rpn_gt_output
 
 
-# 可能输出很多proposal
-# 输入就是一个y要手动分
 def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class):
     '''
     :param proposal_list: the original output of the RPN network
@@ -27,7 +25,7 @@ def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_
                 tem_gt_bbox.append(proposal_list[i][j])
                 tem_gt_score.append(0)
             else:
-                tem_gt_bbox.append(compute_rpn_gt_output(anchor_list[j], gt_bbox[match][i]))
+                tem_gt_bbox.append(compute_rpn_gt_output(anchor_list[j], gt_bbox[i][match]))
                 tem_gt_score.append(1)
 
         expand_gt_bbox.append(torch.stack(tem_gt_bbox))
@@ -58,8 +56,6 @@ def frcnn_loss(proposal_list, score_list, gt_bbox, gt_class):
     location_loss = SmoothL1Loss()
     classification_loss = CrossEntropyLoss()
 
-    print(score_list)
-    label_list = []
     l_loss = 0
     s_loss = 0
     for i in range(len(proposal_list)):
@@ -75,14 +71,13 @@ def frcnn_loss(proposal_list, score_list, gt_bbox, gt_class):
                 gt_bbox_list.append(proposal_list[j])
             else:
                 gt_bbox_list.append(gt_bbox[:, i, :][index])
-            # gt_bbox_list.append(gt_bbox[:, i, :][index])
             gt_class_list.append(gt_class[index][i])
+
         gt_bbox_list = torch.stack(gt_bbox_list)
         gt_class_list = torch.stack(gt_class_list)
         l_loss += location_loss(proposal_list[i], gt_bbox_list)
         s_loss += classification_loss(score_list[i], gt_class_list)
-    print(l_loss)
-    print(s_loss)
+
     return l_loss + s_loss
 
 
@@ -116,6 +111,9 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
     checkpoint_dir = os.path.join(os.path.abspath('.'), f'{net_name}_checkpoint.pth')
     start_time = time.time()
 
+    if os.path.exists(os.path.join(os.path.abspath('.'), f'{net_name}_final.pth')):
+        net.load_state_dict(torch.load(f'{net_name}_final.pth'))
+
     for epoch in range(num_epoch):
         epoch_loss = 0
         for image_list, label_list in train_iter:
@@ -129,23 +127,18 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
 
             elif net_name == 'RPN':
                 _, proposal_list, score_list = net(image_list)
+                # print(label_list)
                 gt_class = label_list[0]
                 gt_bbox = label_list[1]
 
                 anchor_label, anchor_match = label_anchor(proposal_list, gt_bbox, gt_class, image_list.shape[0], True)
                 loss = rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class)
-                print(loss)
 
             elif net_name == 'Faster R CNN':
                 proposal_list, score_list = net(image_list)
-                print(proposal_list.shape)
-                print(score_list.shape)
                 gt_class = label_list[0]
                 gt_bbox = torch.cat([i.unsqueeze(0) for i in label_list[1]], dim=0)
-                print(gt_class)
-                print(gt_bbox)
                 loss = frcnn_loss(proposal_list, score_list, gt_bbox, gt_class)
-
 
             optimizer.zero_grad()
             loss.backward()
@@ -157,14 +150,14 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
 
             print(f"RPN: batch training loss: {current_epoch_loss}, batch training time: {time.time()-start_time}")
 
-        if net_name == 'VGG':
-            val_accuracy = evaluate_val_accuracy(net, test_iter, device)
-        elif net_name == 'RPN':
-            val_accuracy = 0
-        elif net_name == 'Faster R CNN':
-            val_accuracy = 0
+        # if net_name == 'VGG':
+        #     val_accuracy = evaluate_val_accuracy(net, test_iter, device)
+        # elif net_name == 'RPN':
+        #     val_accuracy = 0
+        # elif net_name == 'Faster R CNN':
+        #     val_accuracy = 0
 
-        print(f"RPN: epoch: {epoch+1}, epoch training loss: {epoch_loss}, validation accuracy: {val_accuracy}, epoch training time: {time.time()-start_time}")
+        print(f"RPN: epoch: {epoch+1}, epoch training loss: {epoch_loss}, epoch training time: {time.time()-start_time}")
         start_time = time.time()
 
         torch.save(net, checkpoint_dir)
@@ -180,13 +173,10 @@ def train_fasterrcnn(frcnn, rpn, rpn_lr, frcnn_lr, train_iter, test_iter, device
     lr_scheduler = optim.lr_scheduler.StepLR(rpn_optimizer, step_size=30, gamma=0.1)
 
     # 第一轮rpn跟Faster rcnn不应该共享参数
-    # train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
+    train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
     train_net(frcnn, 'Faster R CNN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
     train_net(rpn, 'RPN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
     train_net(frcnn, 'Faster R CNN', train_iter, test_iter, rpn_optimizer, lr_scheduler, 45, device)
-
-
-
 
 
 

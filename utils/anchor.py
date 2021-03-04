@@ -73,7 +73,7 @@ def generate_anchor_box(feature_map_size, anchor_ratio=[0.5, 1, 2], anchor_size=
     x, y = np.meshgrid(x, y)
     anchor_coordinate = np.stack((x.ravel(), y.ravel()), axis=1)
 
-    # generate anchor hight and width for each cell in the feature map
+    # generate anchor height and width for each cell in the feature map
     anchor_w_h = np.zeros((len(anchor_ratio) * len(anchor_size), 2), dtype=np.float32)
     for i in range(len(anchor_size)):
         for j in range(len(anchor_ratio)):
@@ -125,7 +125,7 @@ def label_anchor(output_bbox, gt_bbox, gt_class, batch_size, is_train):
         tem_label = []
         tem_match = []
         net_output_anchor_bbox = convert_rpn_output_predict_bbox(output_bbox[i])
-        iou_list = compute_iou(net_output_anchor_bbox, torch.stack(gt_bbox)[:, i, :])
+        iou_list = compute_iou(net_output_anchor_bbox, gt_bbox[i])
 
         for iou in iou_list:
             if torch.any(iou > 0.3):
@@ -140,7 +140,7 @@ def label_anchor(output_bbox, gt_bbox, gt_class, batch_size, is_train):
                 tem_match.append(-1)
 
         tem_label = torch.tensor(tem_label)
-        tem_match = torch.tensor(tem_label)
+        tem_match = torch.tensor(tem_match)
 
         if is_train:
             low_bound = net_output_anchor_bbox[:, :2] - net_output_anchor_bbox[:, 2:] / 2

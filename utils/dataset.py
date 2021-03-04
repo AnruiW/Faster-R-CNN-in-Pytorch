@@ -1,6 +1,7 @@
 import os
 import torch
 from PIL import Image
+import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset, random_split
 import torchvision.datasets as datasets
@@ -67,10 +68,6 @@ def load_coco_dataset(root_dir, json_dir, batch_size=16):
     return train_dataloader, val_dataloader
 
 
-def load_VOC_dataset():
-    pass
-
-
 class VOC_Dataset(Dataset):
     def __init__(self, VOC_dir, year, is_train):
         self.size = (800, 800)
@@ -115,8 +112,10 @@ class VOC_Dataset(Dataset):
             h = int(obj['bndbox']['ymax']) - int(obj['bndbox']['ymin'])
             # compute the coordinate after affine transformation
             gt_bbox_list.append(torch.tensor([x*x_scale, y*y_scale, w*x_scale, h*y_scale]))
-
-        return image, [gt_cat_list, gt_bbox_list]
+        # print(gt_bbox_list)
+        gt_bbox_list = torch.stack(gt_bbox_list)
+        gt_cat_list = torch.tensor(gt_cat_list)
+        return image, gt_cat_list, gt_bbox_list
 
 
 if __name__ == "__main__":

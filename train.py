@@ -9,6 +9,17 @@ from Object_Detection.Faster_RCNN_in_Pytorch.utils.dataset import VOC_Dataset
 import torch
 import time
 
+def frcnn_collate(batch):
+    images = []
+    bboxes = []
+    labels = []
+    for img, box, label in batch:
+        images.append(img)
+        bboxes.append(box)
+        labels.append(label)
+    return torch.stack(images), [bboxes, labels]
+
+
 
 def train():
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -25,7 +36,7 @@ def train():
     vgg_train_set = DataLoader(mini_imagenet_train, batch_size=4, shuffle=True)
     vgg_val_set = DataLoader(mini_imagenet_val, batch_size=4, shuffle=True)
 
-    # train_net(vgg, 'VGG', vgg_train_set, vgg_val_set, vgg_optimizer, vgg_lr_scheduler, 75, device)
+    # train_net(vgg, 'vgg16', vgg_train_set, vgg_val_set, vgg_optimizer, vgg_lr_scheduler, 75, device)
 
     rpn = rpn_net(vgg.get_feature_layer())
     frcnn = frcnn_net(rpn, 20)
@@ -35,8 +46,8 @@ def train():
     voc_train = VOC_Dataset(r'D:\Dataset\VOC', '2007', 'train')
     voc_val =VOC_Dataset(r'D:\Dataset\VOC', '2007', 'val')
 
-    frcnn_train_set = DataLoader(voc_train, batch_size=2, shuffle=True)
-    frcnn_val_set = DataLoader(voc_val, batch_size=2, shuffle=True)
+    frcnn_train_set = DataLoader(voc_train, batch_size=2, shuffle=True, pin_memory=True, collate_fn=frcnn_collate)
+    frcnn_val_set = DataLoader(voc_val, batch_size=2, shuffle=True, pin_memory=True, collate_fn=frcnn_collate)
 
     train_fasterrcnn(frcnn, rpn, rpn_lr, frcnn_lr, frcnn_train_set, frcnn_val_set, device)
 
