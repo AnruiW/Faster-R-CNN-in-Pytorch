@@ -19,14 +19,14 @@ def compute_rpn_gt_output(anchor_bbox, gt_bbox):
     return result
 
 
-def convert_rpn_output_predict_bbox(rpn_output):
+def convert_rpn_output_predict_bbox(rpn_output, device):
     '''
     :param rpn_output: the output of rpn location output
     :param anchor_bbox: corresponding anchor box
     :return: convert rpn location output to bbox coordinate
     '''
     anchor_bbox = generate_anchor_box((25, 25))
-    anchor_bbox = anchor_bbox.float()
+    anchor_bbox = anchor_bbox.float().to(device)
 
     x = rpn_output[:, 0] * anchor_bbox[:, 2] + anchor_bbox[:, 0]
     y = rpn_output[:, 1] * anchor_bbox[:, 3] + anchor_bbox[:, 1]
@@ -117,14 +117,14 @@ def compute_iou(anchor_bbox, gt_bbox):
     return interact / union
 
 
-def label_anchor(output_bbox, gt_bbox, gt_class, batch_size, is_train):
+def label_anchor(output_bbox, gt_bbox, gt_class, batch_size, is_train, device):
     anchor_label = []
     anchor_match = []
 
     for i in range(batch_size):
         tem_label = []
         tem_match = []
-        net_output_anchor_bbox = convert_rpn_output_predict_bbox(output_bbox[i])
+        net_output_anchor_bbox = convert_rpn_output_predict_bbox(output_bbox[i], device)
         iou_list = compute_iou(net_output_anchor_bbox, gt_bbox[i])
 
         for iou in iou_list:
