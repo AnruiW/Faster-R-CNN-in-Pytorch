@@ -117,7 +117,7 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
     for epoch in range(num_epoch):
         epoch_loss = 0
         for image_list, label_list in train_iter:
-            image_list.to(device)
+            image_list = image_list.to(device)
 
             if net_name == 'VGG':
                 label_list.to(device)
