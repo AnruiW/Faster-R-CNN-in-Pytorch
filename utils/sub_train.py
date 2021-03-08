@@ -6,7 +6,7 @@ from torch.nn import SmoothL1Loss, CrossEntropyLoss
 from Object_Detection.Faster_RCNN_in_Pytorch.utils.anchor import compute_iou, generate_anchor_box, label_anchor, compute_rpn_gt_output
 
 
-def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class):
+def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class, device):
     '''
     :param proposal_list: the original output of the RPN network
     :param score_list: the original output of the RPN network
@@ -22,22 +22,24 @@ def rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_
         tem_gt_score = []
         for j, match in enumerate(anchor_match[:, i]):
             if match != -1:
-                tem_gt_bbox.append(proposal_list[i][j])
+                tem_gt_bbox.append(proposal_list[i][j].to(device))
                 tem_gt_score.append(0)
             else:
-                tem_gt_bbox.append(compute_rpn_gt_output(anchor_list[j], gt_bbox[i][match]))
+                tem_gt_bbox.append(compute_rpn_gt_output(anchor_list[j], gt_bbox[i][match]).to(device))
                 tem_gt_score.append(1)
 
-        expand_gt_bbox.append(torch.stack(tem_gt_bbox))
+        expand_gt_bbox.append(torch.stack(tem_gt_bbox).to(device))
         expand_gt_score.append(torch.tensor(tem_gt_score))
-    expand_gt_bbox = torch.stack(expand_gt_bbox)
-    expand_gt_score = torch.stack(expand_gt_score)
+    expand_gt_bbox = torch.stack(expand_gt_bbox).to(device)
+    expand_gt_score = torch.stack(expand_gt_score).to(device)
 
     location_loss = SmoothL1Loss()
     l_loss = []
     for i in range(len(proposal_list)):
         tem_l_loss = 0
         for j in range(len(expand_gt_bbox[i])):
+            if torch.all(expand_gt_bbox[i][j] == proposal_list[i][j]):
+                continue
             tem_l_loss += expand_gt_score[i][j] * location_loss(expand_gt_bbox[i][j], proposal_list[i][j])
         l_loss.append(tem_l_loss * 10 / len(proposal_list[0]))
 
@@ -113,6 +115,7 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
 
     if os.path.exists(os.path.join(os.path.abspath('.'), f'{net_name}_final.pth')):
         net.load_state_dict(torch.load(f'{net_name}_final.pth'))
+        return 0
 
     for epoch in range(num_epoch):
         epoch_loss = 0
@@ -131,8 +134,8 @@ def train_net(net, net_name, train_iter, test_iter, optimizer, lr_scheduler, num
                 gt_class = label_list[0]
                 gt_bbox = label_list[1]
 
-                anchor_label, anchor_match = label_anchor(proposal_list, gt_bbox, gt_class, image_list.shape[0], True)
-                loss = rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class)
+                anchor_label, anchor_match = label_anchor(proposal_list, gt_bbox, gt_class, image_list.shape[0], True, device)
+                loss = rpn_loss(proposal_list, score_list, anchor_label, anchor_match, gt_bbox, gt_class, device)
 
             elif net_name == 'Faster R CNN':
                 proposal_list, score_list = net(image_list)
